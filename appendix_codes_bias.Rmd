@@ -1,0 +1,442 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+```{r message=FALSE}
+library(sde)
+library(ggplot2)
+library(dplyr)
+```
+
+# Black Scholes True solution function
+```{r}
+sde.bs.true <- function(X0=100, theta=c(0.05, 0.25), delta.t=0.004, T=1){
+  t <- seq(0, T, delta.t)
+  dW <- c(0)
+  dW <- append(dW, rnorm(T/delta.t, 0, sqrt(delta.t)))
+  B <- cumsum(dW)
+  return (X0*exp((theta[1]-(theta[2]**2)/2)*t + theta[2]*B))
+}
+```
+
+# Runge-Kutta function
+```{r}
+sde.rk <- function(X0=100, theta=c(0.05, 0.25), delta.t=0.004, T=1){
+  mu <- theta[1]
+  sigma <- theta[2]
+  dW <- c(0)
+  dW <- append(dW, rnorm(T / delta.t, 0, sqrt(delta.t)))
+  t <- seq(0, T, delta.t)
+  sde.runge.kutta <- numeric(length(t))
+  sde.runge.kutta[1] <- X0
+  for (i in 2:length(t)){
+    upsilon <- sde.runge.kutta[i-1] + mu*sde.runge.kutta[i-1]*delta.t +
+      sigma*sde.runge.kutta[i-1]*sqrt(delta.t)
+    
+    sde.runge.kutta[i] <- sde.runge.kutta[i-1] + mu*sde.runge.kutta[i-1]*delta.t +
+      sigma*sde.runge.kutta[i-1]*dW[i] + 
+      0.5*sigma*(upsilon-sde.runge.kutta[i-1])*(dW[i]**2-delta.t)*(delta.t**(-0.5))
+  }
+  return (sde.runge.kutta)
+}
+```
+
+# Setting up the parameters for simulations - sigma = 1%
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.01
+mu <- 0.05
+repeat.count <- 5000
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+set.seed(seed)
+sim.true <- replicate(repeat.count, 
+            sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Monte-Carlo Simulation of Milstein
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+s.x <- parse(text = paste(sigma))
+sim.mil <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                     method="milstein", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+sim.mil2 <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                    drift.xx = d.xx, sigma.xx = s.xx, 
+                    method="milstein2", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Runge-Kutta
+```{r}
+set.seed(seed)
+sim.rk <- replicate(repeat.count, 
+            sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Plot the distribution of the errors
+```{r}
+plot(density(sim.mil2 - sim.true), col="green", 
+     xlim= c(-0.005, 0.005), main = 'Distribution of Errors', 
+     sub='sigma=0.01', xlab='Error')
+lines(density(sim.mil - sim.true), col="red")
+lines(density(sim.rk - sim.true), col="blue")
+legend('topleft', legend=c("Milstein", "Second Milstein", "Runge-Kutta"),
+       col=c("red", "green" ,"blue"), lty=1, cex=0.8)
+```
+
+# Setting up the parameters for simulations - sigma = 5%
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.05
+mu <- 0.05
+repeat.count <- 5000
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+set.seed(seed)
+sim.true <- replicate(repeat.count, 
+            sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Monte-Carlo Simulation of Milstein
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+s.x <- parse(text = paste(sigma))
+sim.mil <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                     method="milstein", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+sim.mil2 <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                    drift.xx = d.xx, sigma.xx = s.xx, 
+                    method="milstein2", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Runge-Kutta
+```{r}
+set.seed(seed)
+sim.rk <- replicate(repeat.count, 
+            sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Plot the distribution of the errors
+```{r}
+plot(density(sim.mil2 - sim.true), col="green", 
+     xlim= c(-0.01, 0.01), ylim=c(0, 800),
+     main = 'Distribution of Errors', 
+     sub='sigma=0.05', xlab='Error')
+lines(density(sim.mil - sim.true), col="red")
+lines(density(sim.rk - sim.true), col="blue")
+legend('topleft', legend=c("Milstein", "Second Milstein", "Runge-Kutta"),
+       col=c("red", "green" ,"blue"), lty=1, cex=0.8)
+```
+
+# Setting up the parameters for simulations - sigma = 15%
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.15
+mu <- 0.05
+repeat.count <- 5000
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+set.seed(seed)
+sim.true <- replicate(repeat.count, 
+            sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Monte-Carlo Simulation of Milstein
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+s.x <- parse(text = paste(sigma))
+sim.mil <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                     method="milstein", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+sim.mil2 <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                    drift.xx = d.xx, sigma.xx = s.xx, 
+                    method="milstein2", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Runge-Kutta
+```{r}
+set.seed(seed)
+sim.rk <- replicate(repeat.count, 
+            sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Plot the distribution of the errors
+```{r}
+plot(density(sim.mil2 - sim.true), col="green", 
+     xlim= c(-0.03, 0.03), ylim = c(0, 300),
+     main = 'Distribution of Errors', 
+     sub='sigma=0.15', xlab='Error')
+lines(density(sim.mil - sim.true), col="red")
+lines(density(sim.rk - sim.true), col="blue")
+legend('topleft', legend=c("Milstein", "Second Milstein", "Runge-Kutta"),
+       col=c("red", "green" ,"blue"), lty=1, cex=0.8)
+```
+
+# Setting up the parameters for simulations - sigma = 30%
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.30
+mu <- 0.05
+repeat.count <- 5000
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+set.seed(seed)
+sim.true <- replicate(repeat.count, 
+            sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Monte-Carlo Simulation of Milstein
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+s.x <- parse(text = paste(sigma))
+sim.mil <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                     method="milstein", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+sim.mil2 <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                    drift.xx = d.xx, sigma.xx = s.xx, 
+                    method="milstein2", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Runge-Kutta
+```{r}
+set.seed(seed)
+sim.rk <- replicate(repeat.count, 
+            sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Plot the distribution of the errors
+```{r}
+plot(density(sim.mil2 - sim.true), col="green", 
+     xlim= c(-0.1, 0.2), ylim = c(0, 150),
+     main = 'Distribution of Errors', 
+     sub='sigma=0.30', xlab='Error')
+lines(density(sim.mil - sim.true), col="red")
+lines(density(sim.rk - sim.true), col="blue")
+legend('topright', legend=c("Milstein", "Second Milstein", "Runge-Kutta"),
+       col=c("red", "green" ,"blue"), lty=1, cex=0.8)
+```
+
+# Setting up the parameters for simulations - sigma = 5%, negative mu
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.05
+mu <- -0.05
+repeat.count <- 5000
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+set.seed(seed)
+sim.true <- replicate(repeat.count, 
+            sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Monte-Carlo Simulation of Milstein
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+s.x <- parse(text = paste(sigma))
+sim.mil <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                     method="milstein", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+sim.mil2 <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                    drift.xx = d.xx, sigma.xx = s.xx, 
+                    method="milstein2", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Runge-Kutta
+```{r}
+set.seed(seed)
+sim.rk <- replicate(repeat.count, 
+            sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Plot the distribution of the errors
+```{r}
+plot(density(sim.mil2 - sim.true), col="green", 
+      xlim= c(-0.01, 0.01), ylim = c(0, 800),
+     main = 'Distribution of Errors', 
+     sub='sigma=0.05', xlab='Error')
+lines(density(sim.mil - sim.true), col="red")
+lines(density(sim.rk - sim.true), col="blue")
+legend('topleft', legend=c("Milstein", "Second Milstein", "Runge-Kutta"),
+       col=c("red", "green" ,"blue"), lty=1, cex=0.8)
+```
+
+
+# Setting up the parameters for simulations - sigma = 30%, negative mu
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.30
+mu <- -0.05
+repeat.count <- 5000
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+set.seed(seed)
+sim.true <- replicate(repeat.count, 
+            sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Monte-Carlo Simulation of Milstein
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+s.x <- parse(text = paste(sigma))
+sim.mil <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                     method="milstein", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+set.seed(seed)
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+sim.mil2 <- replicate(repeat.count, 
+            sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                    drift.xx = d.xx, sigma.xx = s.xx, 
+                    method="milstein2", N=N, T=T))
+```
+
+# Monte-Carlo Simulation of Runge-Kutta
+```{r}
+set.seed(seed)
+sim.rk <- replicate(repeat.count, 
+            sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+```
+
+# Plot the distribution of the errors
+```{r}
+plot(density(sim.mil2 - sim.true), col="green", 
+      xlim= c(-0.2, 0.1), ylim = c(0, 150),
+     main = 'Distribution of Errors', 
+     sub='sigma=0.30', xlab='Error')
+lines(density(sim.mil - sim.true), col="red")
+lines(density(sim.rk - sim.true), col="blue")
+legend('topleft', legend=c("Milstein", "Second Milstein", "Runge-Kutta"),
+       col=c("red", "green" ,"blue"), lty=1, cex=0.8)
+```
+
+
+

@@ -1,0 +1,183 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+```{r message=FALSE}
+library(sde)
+library(ggplot2)
+library(dplyr)
+```
+
+# Black Scholes True solution function
+```{r}
+sde.bs.true <- function(X0=100, theta=c(0.05, 0.25), delta.t=0.004, T=1){
+  t <- seq(0, T, delta.t)
+  dW <- c(0)
+  dW <- append(dW, rnorm(T/delta.t, 0, sqrt(delta.t)))
+  B <- cumsum(dW)
+  return (X0*exp((theta[1]-(theta[2]**2)/2)*t + theta[2]*B))
+}
+```
+
+# Runge-Kutta function
+```{r}
+sde.rk <- function(X0=100, theta=c(0.05, 0.25), delta.t=0.004, T=1){
+  mu <- theta[1]
+  sigma <- theta[2]
+  dW <- c(0)
+  dW <- append(dW, rnorm(T / delta.t, 0, sqrt(delta.t)))
+  t <- seq(0, T, delta.t)
+  sde.runge.kutta <- numeric(length(t))
+  sde.runge.kutta[1] <- X0
+  for (i in 2:length(t)){
+    upsilon <- sde.runge.kutta[i-1] + mu*sde.runge.kutta[i-1]*delta.t +
+      sigma*sde.runge.kutta[i-1]*sqrt(delta.t)
+    
+    sde.runge.kutta[i] <- sde.runge.kutta[i-1] + mu*sde.runge.kutta[i-1]*delta.t +
+      sigma*sde.runge.kutta[i-1]*dW[i] + 
+      0.5*sigma*(upsilon-sde.runge.kutta[i-1])*(dW[i]**2-delta.t)*(delta.t**(-0.5))
+  }
+  return (sde.runge.kutta)
+}
+```
+
+# Changing number of timesteps(50 - 8000): Setting up the bounds
+```{r}
+seed <- 20230331
+T <- 5
+sigma <- 0.25
+mu <- 0.01
+repeat.count <- 500
+N.list <- c(50, 125, 250, 500, 1000, 2000, 4000, 8000)
+df.err <- data.frame(mu=numeric(0), method=character(0), 
+                     err=numeric(0), abs.err=numeric(0))
+```
+
+# Changing number of timesteps(50 - 8000): Monte-Carlo Simulation of Black-Scholes True Solution
+```{r}
+sim.true <- numeric(0)
+set.seed(seed)
+for (N in N.list) {
+  sim.true <- c(sim.true, replicate(repeat.count, 
+              sde.bs.true(T=T, delta.t = T/N, theta=c(mu,sigma))))
+}
+```
+
+# Changing number of timesteps(50 - 8000): Monte-Carlo Simulation of Milstein
+```{r}
+sim.mil <- numeric(0)
+dummy.N <- numeric(0)
+set.seed(seed)
+for (N in N.list) {
+  d <- parse(text = paste(mu,"* x"))
+  s <- parse(text = paste(sigma,"* x"))
+  s.x <- parse(text = paste(sigma))
+  sim.mil <- c(sim.mil, replicate(repeat.count, 
+              sde.sim(X0=100, drift=d, sigma=s, sigma.x = s.x,
+                       method="milstein", N=N, T=T)))
+  dummy.N <- c(dummy.N, rep(N, repeat.count*(N+1)))
+}
+df.err.mil <- data.frame(N=dummy.N,
+               method=rep("mil",repeat.count*(sum(N.list)+length(N.list))),
+               err=sim.mil-sim.true, abs.err=abs(sim.mil-sim.true))
+```
+
+# Changing number of timesteps(50 - 8000): Monte-Carlo Simulation of Second Milstein Scheme
+```{r}
+sim.mil2 <- numeric(0)
+dummy.N <- numeric(0)
+set.seed(seed)
+for (N in N.list) {
+  d <- parse(text = paste(mu,"* x"))
+  s <- parse(text = paste(sigma,"* x"))
+  d.x <- parse(text = paste(mu))
+  s.x <- parse(text = paste(sigma))
+  d.xx <- parse(text = paste(0))
+  s.xx <- parse(text = paste(0))
+  sim.mil2 <- c(sim.mil2, replicate(repeat.count, 
+              sde.sim(X0=100, drift=d, sigma=s, drift.x=d.x, sigma.x = s.x,
+                      drift.xx = d.xx, sigma.xx = s.xx, 
+                      method="milstein2", N=N, T=T)))
+  dummy.N <- c(dummy.N, rep(N, repeat.count*(N+1)))
+}
+df.err.mil2 <- data.frame(N=dummy.N,
+               method=rep("mil2",repeat.count*(sum(N.list)+length(N.list))),
+               err=sim.mil2-sim.true, abs.err=abs(sim.mil2-sim.true))
+```
+
+# Changing number of timesteps(50 - 8000): Monte-Carlo Simulation of Runge-Kutta
+```{r}
+sim.rk <- numeric(0)
+dummy.N <- numeric(0)
+set.seed(seed)
+for (N in N.list) {
+  sim.rk <- c(sim.rk, replicate(repeat.count, 
+              sde.rk(T=T, delta.t = T/N, theta=c(mu,sigma)))
+              )
+  dummy.N <- c(dummy.N, rep(N, repeat.count*(N+1)))
+}
+df.err.rk <- data.frame(N=dummy.N,
+               method=rep("rk",repeat.count*(sum(N.list)+length(N.list))),
+               err=sim.rk-sim.true, abs.err=abs(sim.rk-sim.true))
+```
+
+# Changing number of timesteps(50 - 8000): Mean and Confident Interval of Absolute Errors
+```{r}
+conf.int.mil <- aggregate(df.err.mil$abs.err, list(df.err.mil$N), 
+                        FUN=quantile, probs=c(0.025, 0.975))
+df.err.mil2 <- df.err.mil2[is.finite(df.err.mil2$abs.err),]
+conf.int.mil2 <- aggregate(df.err.mil2$abs.err, list(df.err.mil2$N), 
+                        FUN=quantile, probs=c(0.025, 0.975))
+conf.int.rk <- aggregate(df.err.rk$abs.err, list(df.err.rk$N), 
+                        FUN=quantile, probs=c(0.025, 0.975))
+mean.mil <- aggregate(df.err.mil$abs.err, list(df.err.mil$N), FUN=mean)
+mean.mil2 <- aggregate(df.err.mil2$abs.err, list(df.err.mil2$N), FUN=mean)
+mean.rk <- aggregate(df.err.rk$abs.err, list(df.err.rk$N), FUN=mean)
+
+mean.mil
+mean.mil2
+mean.rk
+conf.int.mil$x
+conf.int.mil2$x
+conf.int.rk$x
+```
+
+# Changing number of timesteps(50 - 8000): Plot the results
+```{r warning=FALSE}
+df.err <- rbind(df.err.mil, df.err.mil2, df.err.rk)
+df.err$N <- factor(df.err$N)
+p <-df.err %>%
+  mutate(  ) %>%
+  ggplot( aes(x=N, y=abs.err, fill=method) ) +
+    geom_boxplot(outlier.shape=NA) +
+    ggtitle("Varying Number of Timesteps (50 - 8000)") +
+    xlab("Number of Time Steps") +
+    ylab("Absolute Error") +
+    stat_summary(fun = median,
+               geom = "line",
+               aes(group = method, color = method)) +
+    scale_fill_discrete(labels=c('Milstein Scheme',
+                                 'Second Milstein Scheme', 
+                                 'Runge-Kutta Method'))+
+    scale_color_discrete(labels=c('Milstein Scheme',
+                                  'Second Milstein Scheme', 
+                                  'Runge-Kutta Method'))+
+    guides(fill=guide_legend(title="Method"), 
+           color=guide_legend(title="Method")) +
+    scale_x_discrete(labels = N.list)+
+    scale_y_continuous(limits = c(0, 0.3))
+p
+```
+
+
+
+
+
+

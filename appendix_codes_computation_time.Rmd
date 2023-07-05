@@ -1,0 +1,88 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+```{r message=FALSE}
+library(sde)
+library(ggplot2)
+library(dplyr)
+```
+
+# Black Scholes True solution function
+```{r}
+sde.bs.true <- function(X0=100, theta=c(0.05, 0.25), delta.t=0.004, T=1){
+  t <- seq(0, T, delta.t)
+  dW <- c(0)
+  dW <- append(dW, rnorm(T/delta.t, 0, sqrt(delta.t)))
+  B <- cumsum(dW)
+  return (X0*exp((theta[1]-(theta[2]**2)/2)*t + theta[2]*B))
+}
+```
+
+# Runge-Kutta function
+```{r}
+sde.rk <- function(X0=100, theta=c(0.05, 0.25), delta.t=0.004, T=1){
+  mu <- theta[1]
+  sigma <- theta[2]
+  dW <- c(0)
+  dW <- append(dW, rnorm(T / delta.t, 0, sqrt(delta.t)))
+  t <- seq(0, T, delta.t)
+  sde.runge.kutta <- numeric(length(t))
+  sde.runge.kutta[1] <- X0
+  for (i in 2:length(t)){
+    upsilon <- sde.runge.kutta[i-1] + mu*sde.runge.kutta[i-1]*delta.t +
+      sigma*sde.runge.kutta[i-1]*sqrt(delta.t)
+    
+    sde.runge.kutta[i] <- sde.runge.kutta[i-1] + mu*sde.runge.kutta[i-1]*delta.t +
+      sigma*sde.runge.kutta[i-1]*dW[i] + 
+      0.5*sigma*(upsilon-sde.runge.kutta[i-1])*(dW[i]**2-delta.t)*(delta.t**(-0.5))
+  }
+  return (sde.runge.kutta)
+}
+```
+
+# Computation Time: General Setup
+```{r}
+seed <- 20230331
+T <- 1
+N <- 250 * T
+delta <- T/N
+sigma <- 0.25
+mu <- 0.05
+repeat.count <- 5000
+d <- parse(text = paste(mu,"* x"))
+s <- parse(text = paste(sigma,"* x"))
+d.x <- parse(text = paste(mu))
+s.x <- parse(text = paste(sigma))
+d.xx <- parse(text = paste(0))
+s.xx <- parse(text = paste(0))
+```
+
+# Computational Time
+```{r}
+time.rk <- system.time(replicate(repeat.count, sde.rk(delta.t=delta, T=T)))
+time.mil <- system.time(replicate(repeat.count, sde.sim(X0=100, drift=d, sigma=s, 
+                                        sigma.x=s.x, method="milstein", N=N, T=T)))
+time.mil2 <- system.time(replicate(repeat.count, sde.sim(X0=100, drift=d, sigma=s, 
+                                         sigma.x=s.x, drift.x = d.x, 
+                                         sigma.xx=s.xx, drift.xx=d.xx, 
+                                         method="milstein2", N=N, T=T)))
+
+```
+
+```{r}
+time.rk
+time.mil
+time.mil2
+```
+
+
+
+
